@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "buildCommand": "",
   "outputDirectory": "public",
   "routes": [
     { "src": "/api/config", "dest": "/api/config.ts" },
