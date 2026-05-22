@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo Sync Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: {} }
+    }
+  </script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; background: #0b0b13; color: #cbd5e1; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; }
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2d2d42; border-radius: 2px; }
+    .log-info  { color: #94a3b8; }
+    .log-warn  { color: #f59e0b; }
+    .log-error { color: #f87171; }
+    .log-success { color: #4ade80; }
+    .run-item { cursor: pointer; padding: 10px 16px; border-left: 2px solid transparent; transition: all 0.15s; }
+    .run-item:hover { background: rgba(99,102,241,0.07); }
+    .run-item.active { background: rgba(99,102,241,0.12); border-left-color: #6366f1; }
+    .tab-btn { padding: 5px 14px; border-radius: 5px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; outline: none; }
+    .tab-btn.active { background: #6366f1; color: #fff; }
+    .tab-btn.inactive { background: transparent; color: #64748b; }
+    .tab-btn.inactive:hover { color: #cbd5e1; background: #1e1e2e; }
+    .stat-card { background: #12121e; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px 20px; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .spinning { display: inline-block; animation: spin 1.2s linear infinite; }
+  </style>
+</head>
+<body>
+
+<div style="display:flex; flex-direction:column; height:100vh;">
+
+  <!-- Header -->
+  <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 24px; background:#0f0f1c; border-bottom:1px solid #1e1e2e; flex-shrink:0;">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="color:#6366f1; font-size:18px;">⚡</span>
+      <span style="color:#fff; font-weight:600; font-size:15px;">Demo Sync</span>
+      <span style="color:#374151; font-size:13px;">/ Dashboard</span>
+    </div>
+    <div id="conn-status" style="display:flex; align-items:center; gap:6px; font-size:11px; color:#4b5563;">
+      <span id="conn-dot" style="width:7px; height:7px; border-radius:50%; background:#374151; display:inline-block;"></span>
+      <span id="conn-label">Conectando...</span>
+    </div>
+  </div>
+
+  <!-- Stats Bar -->
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; padding:16px 24px; border-bottom:1px solid #1e1e2e; flex-shrink:0;">
+    <div class="stat-card">
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Total de Syncs</div>
+      <div id="stat-runs" style="color:#fff; font-size:26px; font-weight:700;">—</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Docs Processados</div>
+      <div id="stat-total" style="color:#fff; font-size:26px; font-weight:700;">—</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Taxa de Sucesso</div>
+      <div id="stat-rate" style="color:#4ade80; font-size:26px; font-weight:700;">—</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Não Encontrados</div>
+      <div id="stat-nf" style="color:#fbbf24; font-size:26px; font-weight:700;">—</div>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div style="display:flex; flex:1; overflow:hidden;">
+
+    <!-- Sidebar -->
+    <div style="width:240px; border-right:1px solid #1e1e2e; display:flex; flex-direction:column; flex-shrink:0;">
+      <div style="padding:10px 16px; border-bottom:1px solid #1e1e2e;">
+        <span style="font-size:10px; color:#4b5563; text-transform:uppercase; letter-spacing:.08em;">Execuções</span>
+      </div>
+      <div id="runs-list" style="flex:1; overflow-y:auto; padding:4px 0;">
+        <div style="padding:24px 16px; text-align:center; color:#374151; font-size:12px;">Carregando...</div>
+      </div>
+    </div>
+
+    <!-- Detail -->
+    <div style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+
+      <!-- Run Header -->
+      <div id="run-header" style="padding:12px 24px; border-bottom:1px solid #1e1e2e; background:#0f0f1c; flex-shrink:0; min-height:52px;">
+        <div style="color:#374151; font-size:12px; margin-top:4px;">Selecione uma execução para ver os detalhes</div>
+      </div>
+
+      <!-- Tabs -->
+      <div id="run-tabs" style="display:none; padding:8px 24px; border-bottom:1px solid #1e1e2e; flex-shrink:0;">
+        <div style="display:flex; gap:4px;">
+          <button class="tab-btn active" id="tab-logs" onclick="switchTab('logs')">Logs</button>
+          <button class="tab-btn inactive" id="tab-docs" onclick="switchTab('docs')">Documentos</button>
+        </div>
+      </div>
+
+      <!-- Panels -->
+      <div style="flex:1; overflow:hidden; position:relative;">
+
+        <!-- Logs Panel -->
+        <div id="panel-logs" style="position:absolute; inset:0; overflow-y:auto; padding:12px 20px; line-height:1.7;">
+          <div style="color:#374151; text-align:center; padding:40px 0; font-size:12px;">Selecione uma execução</div>
+        </div>
+
+        <!-- Docs Panel -->
+        <div id="panel-docs" style="position:absolute; inset:0; overflow-y:auto; display:none;">
+          <table style="width:100%; border-collapse:collapse;">
+            <thead style="position:sticky; top:0; background:#0f0f1c; z-index:1;">
+              <tr style="border-bottom:1px solid #1e1e2e;">
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;">Data</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em; white-space:nowrap;">Documento</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em;">Empresa</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em;">Pessoa</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em;">Status</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em;">Estratégia</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em;">Score</th>
+                <th style="padding:10px 16px; text-align:left; color:#4b5563; font-size:11px; font-weight:500; text-transform:uppercase; letter-spacing:.05em;">Interaction ID</th>
+              </tr>
+            </thead>
+            <tbody id="docs-tbody"></tbody>
+          </table>
+          <div id="docs-empty" style="padding:40px; text-align:center; color:#374151; font-size:12px; display:none;">Nenhum documento nesta execução</div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+  const { createClient } = supabase
+
+  let sb = null
+  let runs = []
+  let currentRunId = null
+  let realtimeChannel = null
+
+  // ── Init ─────────────────────────────────────────────────────────────
+  async function init() {
+    let config
+    try {
+      config = await fetch('/api/config').then(r => r.json())
+    } catch {
+      setConn(false, 'Servidor offline')
+      return
+    }
+
+    if (!config.supabaseUrl) { setConn(false, 'Config inválida'); return }
+
+    sb = createClient(config.supabaseUrl, config.supabaseKey)
+    setConn(true, 'Conectado')
+
+    await loadStats()
+    await loadRuns()
+  }
+
+  // ── Connection badge ──────────────────────────────────────────────────
+  function setConn(ok, label) {
+    document.getElementById('conn-dot').style.background = ok ? '#4ade80' : '#f87171'
+    document.getElementById('conn-label').textContent = label
+    document.getElementById('conn-label').style.color = ok ? '#4ade80' : '#f87171'
+  }
+
+  // ── Stats ─────────────────────────────────────────────────────────────
+  async function loadStats() {
+    const { data } = await sb.from('sync_runs').select('total,success_count,not_found_count,error_count,status')
+    if (!data || data.length === 0) {
+      ['stat-runs','stat-total','stat-rate','stat-nf'].forEach(id => document.getElementById(id).textContent = '0')
+      return
+    }
+    const done = data.filter(r => r.status !== 'running')
+    const total = done.reduce((s,r) => s + (r.total||0), 0)
+    const success = done.reduce((s,r) => s + (r.success_count||0), 0)
+    const nf = done.reduce((s,r) => s + (r.not_found_count||0), 0)
+    const rate = total > 0 ? Math.round(success/total*100) : 0
+    document.getElementById('stat-runs').textContent = done.length
+    document.getElementById('stat-total').textContent = total
+    document.getElementById('stat-rate').textContent = total > 0 ? rate + '%' : '—'
+    document.getElementById('stat-nf').textContent = nf
+  }
+
+  // ── Runs List ─────────────────────────────────────────────────────────
+  async function loadRuns() {
+    const { data } = await sb.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(50)
+    runs = data || []
+    renderRunsList()
+    if (runs.length > 0) selectRun(runs[0].id)
+  }
+
+  function renderRunsList() {
+    const el = document.getElementById('runs-list')
+    if (runs.length === 0) {
+      el.innerHTML = '<div style="padding:24px 16px; text-align:center; color:#374151; font-size:12px;">Nenhuma execução ainda</div>'
+      return
+    }
+    el.innerHTML = runs.map(run => {
+      const d = new Date(run.started_at)
+      const dateStr = d.toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit' })
+      const timeStr = d.toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
+      const isActive = run.id === currentRunId
+      const isRunning = run.status === 'running'
+
+      const icon = isRunning
+        ? '<span class="spinning" style="color:#818cf8;">⟳</span>'
+        : run.status === 'done'
+          ? '<span style="color:#4ade80;">✓</span>'
+          : '<span style="color:#f87171;">✗</span>'
+
+      const counters = !isRunning && (run.total||0) > 0
+        ? `<div style="margin-top:4px; display:flex; gap:8px; font-size:11px;">
+             <span style="color:#4ade80;">${run.success_count||0}✓</span>
+             <span style="color:#fbbf24;">${run.not_found_count||0}⚠</span>
+             ${(run.error_count||0) > 0 ? `<span style="color:#f87171;">${run.error_count}✗</span>` : ''}
+           </div>`
+        : isRunning ? '<div style="color:#818cf8; font-size:11px; margin-top:3px;">● Rodando...</div>' : ''
+
+      const sub = !isRunning && (run.total||0) > 0
+        ? `<div style="color:#4b5563; font-size:11px;">${run.total} docs</div>`
+        : ''
+
+      return `
+        <div class="run-item ${isActive ? 'active' : ''}" onclick="selectRun('${run.id}')">
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <span style="color:${isActive ? '#a5b4fc' : '#94a3b8'}; font-size:12px; font-weight:500;">${dateStr} ${timeStr}</span>
+            ${icon}
+          </div>
+          ${sub}
+          ${counters}
+        </div>`
+    }).join('')
+  }
+
+  // ── Select Run ────────────────────────────────────────────────────────
+  async function selectRun(runId) {
+    currentRunId = runId
+    renderRunsList()
+
+    if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null }
+
+    const run = runs.find(r => r.id === runId)
+    if (!run) return
+
+    renderRunHeader(run)
+    document.getElementById('run-tabs').style.display = 'block'
+
+    await Promise.all([loadLogs(runId), loadDocs(runId)])
+
+    if (run.status === 'running') subscribeToRun(runId)
+  }
+
+  function renderRunHeader(run) {
+    const d = new Date(run.started_at)
+    const dateStr = d.toLocaleString('pt-BR')
+    const dur = run.finished_at
+      ? Math.round((new Date(run.finished_at) - d) / 1000) + 's'
+      : run.status === 'running' ? 'em andamento' : '—'
+
+    const badge = run.status === 'running'
+      ? '<span style="background:rgba(99,102,241,.2); color:#818cf8; border:1px solid rgba(99,102,241,.3); padding:2px 10px; border-radius:20px; font-size:11px;">● Rodando</span>'
+      : run.status === 'done'
+        ? '<span style="background:rgba(74,222,128,.1); color:#4ade80; border:1px solid rgba(74,222,128,.2); padding:2px 10px; border-radius:20px; font-size:11px;">✓ Concluído</span>'
+        : '<span style="background:rgba(248,113,113,.1); color:#f87171; border:1px solid rgba(248,113,113,.2); padding:2px 10px; border-radius:20px; font-size:11px;">✗ Erro</span>'
+
+    document.getElementById('run-header').innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="color:#fff; font-weight:600;">${dateStr}</span>
+          ${badge}
+        </div>
+        <div style="display:flex; gap:16px; font-size:11px; color:#64748b;">
+          <span><b style="color:#4ade80;">${run.success_count||0}</b> sucesso</span>
+          <span><b style="color:#fbbf24;">${run.not_found_count||0}</b> não encontrado</span>
+          <span><b style="color:#f87171;">${run.error_count||0}</b> erro</span>
+          <span>duração: ${dur}</span>
+        </div>
+      </div>`
+  }
+
+  // ── Logs ──────────────────────────────────────────────────────────────
+  async function loadLogs(runId) {
+    const { data } = await sb.from('sync_output').select('*').eq('run_id', runId).order('created_at', { ascending: true })
+    const el = document.getElementById('panel-logs')
+    if (!data || data.length === 0) {
+      el.innerHTML = '<div style="color:#374151; text-align:center; padding:40px 0; font-size:12px;">Sem logs para esta execução</div>'
+      return
+    }
+    el.innerHTML = data.map(logLineHTML).join('')
+    el.scrollTop = el.scrollHeight
+  }
+
+  function logLineHTML(log) {
+    const t = new Date(log.created_at).toLocaleTimeString('pt-BR')
+    const msg = esc(log.message)
+    return `<div class="log-${log.level||'info'}" style="padding:1px 0; white-space:pre-wrap; word-break:break-word;"><span style="color:#1e3a5f; user-select:none;">${t}  </span>${msg}</div>`
+  }
+
+  function appendLog(log) {
+    const el = document.getElementById('panel-logs')
+    const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+    el.insertAdjacentHTML('beforeend', logLineHTML(log))
+    if (wasAtBottom) el.scrollTop = el.scrollHeight
+  }
+
+  // ── Docs ──────────────────────────────────────────────────────────────
+  async function loadDocs(runId) {
+    const { data } = await sb.from('sync_logs').select('*').eq('run_id', runId).order('created_at', { ascending: true })
+    renderDocsTable(data || [])
+  }
+
+  function renderDocsTable(docs) {
+    const tbody = document.getElementById('docs-tbody')
+    const empty = document.getElementById('docs-empty')
+    if (docs.length === 0) {
+      tbody.innerHTML = ''
+      empty.style.display = 'block'
+      return
+    }
+    empty.style.display = 'none'
+    tbody.innerHTML = docs.map(doc => {
+      const badge = doc.status === 'success'
+        ? '<span style="color:#4ade80; background:rgba(74,222,128,.08); padding:2px 8px; border-radius:4px;">✅ sucesso</span>'
+        : doc.status === 'not_found'
+          ? '<span style="color:#fbbf24; background:rgba(251,191,36,.08); padding:2px 8px; border-radius:4px;">⚠️ não encontrado</span>'
+          : '<span style="color:#f87171; background:rgba(248,113,113,.08); padding:2px 8px; border-radius:4px;">❌ erro</span>'
+      const title = esc(truncate(doc.doc_title || '—', 40))
+      const rawDate = doc.doc_date || doc.created_at
+      const docDate = rawDate
+        ? new Date(rawDate).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' })
+        : '—'
+      const strategyLabel = doc.search_strategy
+        ? doc.search_strategy.startsWith('email:') ? '📧 email'
+          : doc.search_strategy === 'title' ? '🔤 título'
+          : doc.search_strategy.startsWith('calendar-company:') ? '📅 agenda'
+          : doc.search_strategy === 'json' ? '📄 json'
+          : doc.search_strategy
+        : '—'
+      return `
+        <tr style="border-bottom:1px solid rgba(30,30,46,.8);" onmouseover="this.style.background='rgba(30,30,46,.4)'" onmouseout="this.style.background=''">
+          <td style="padding:8px 16px; color:#4b5563; white-space:nowrap; font-size:11px;">${docDate}</td>
+          <td style="padding:8px 16px; color:#cbd5e1; max-width:260px;" title="${esc(doc.doc_title||'')}">${title}</td>
+          <td style="padding:8px 16px; color:#94a3b8; white-space:nowrap;">${esc(doc.empresa||'—')}</td>
+          <td style="padding:8px 16px; color:#64748b; white-space:nowrap;">${esc(doc.pessoa||'—')}</td>
+          <td style="padding:8px 16px; white-space:nowrap;">${badge}</td>
+          <td style="padding:8px 16px; color:#64748b; font-size:11px; white-space:nowrap;">${strategyLabel}</td>
+          <td style="padding:8px 16px; color:#64748b; text-align:center;">${doc.match_score != null ? doc.match_score : '—'}</td>
+          <td style="padding:8px 16px; color:#4b5563; font-size:11px;">${doc.interaction_id || '—'}</td>
+        </tr>`
+    }).join('')
+  }
+
+  // ── Realtime ──────────────────────────────────────────────────────────
+  function subscribeToRun(runId) {
+    realtimeChannel = sb.channel(`run-${runId}`)
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'sync_output', filter:`run_id=eq.${runId}` }, p => {
+        appendLog(p.new)
+      })
+      .on('postgres_changes', { event:'INSERT', schema:'public', table:'sync_logs', filter:`run_id=eq.${runId}` }, () => {
+        loadDocs(runId)
+      })
+      .on('postgres_changes', { event:'UPDATE', schema:'public', table:'sync_runs', filter:`id=eq.${runId}` }, p => {
+        const idx = runs.findIndex(r => r.id === runId)
+        if (idx !== -1) runs[idx] = { ...runs[idx], ...p.new }
+        renderRunHeader(runs[idx])
+        renderRunsList()
+        loadStats()
+        if (p.new.status !== 'running') { sb.removeChannel(realtimeChannel); realtimeChannel = null }
+      })
+      .subscribe()
+  }
+
+  // ── Tabs ──────────────────────────────────────────────────────────────
+  function switchTab(tab) {
+    const isLogs = tab === 'logs'
+    document.getElementById('panel-logs').style.display = isLogs ? 'block' : 'none'
+    document.getElementById('panel-docs').style.display = isLogs ? 'none' : 'block'
+    document.getElementById('tab-logs').className = `tab-btn ${isLogs ? 'active' : 'inactive'}`
+    document.getElementById('tab-docs').className = `tab-btn ${isLogs ? 'inactive' : 'active'}`
+  }
+
+  // ── Utils ─────────────────────────────────────────────────────────────
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+  }
+  function truncate(s, n) {
+    return s.length > n ? s.slice(0, n) + '…' : s
+  }
+
+  init().catch(e => { console.error(e); setConn(false, 'Erro: ' + e.message) })
+</script>
+</body>
+</html>

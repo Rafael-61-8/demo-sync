@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "outputDirectory": "public",
+  "functions": {
+    "api/config.ts": {
+      "runtime": "@vercel/node@3"
+    }
+  },
+  "routes": [
+    { "src": "/api/config", "dest": "/api/config.ts" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
