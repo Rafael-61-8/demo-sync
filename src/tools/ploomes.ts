@@ -22,6 +22,8 @@ export interface PloomesDeal {
   ContactName: string
   PersonId?: number
   PersonName?: string
+  PipelineId?: number
+  PipelineName?: string
 }
 
 // Normaliza string para comparação: sem acento, lowercase, sem caracteres especiais
@@ -128,13 +130,31 @@ export async function searchByEmail(email: string): Promise<PloomesContact | nul
 }
 
 export async function getDeal(contactId: number): Promise<PloomesDeal | null> {
-  const url = `${BASE_URL}/Deals?$filter=ContactId eq ${contactId}&$select=Id,Title,ContactId,ContactName,PersonId,PersonName&$top=1&$orderby=CreateDate desc`
+  const targetPipeline = (process.env.PLOOMES_PIPELINE_NAME || 'COMERCIAL - VENDAS').toLowerCase()
+
+  const url = `${BASE_URL}/Deals?$filter=ContactId eq ${contactId}&$select=Id,Title,ContactId,ContactName,PersonId,PersonName,PipelineId,PipelineName&$top=50&$orderby=CreateDate desc`
 
   const res = await fetch(url, { headers: headers() })
   if (!res.ok) return null
 
   const data = await res.json() as { value: PloomesDeal[] }
-  return data.value?.[0] || null
+  const deals = data.value || []
+
+  if (deals.length === 0) return null
+
+  // Prefere o deal mais recente no funil correto
+  const inPipeline = deals.find(d =>
+    d.PipelineName && d.PipelineName.toLowerCase().includes(targetPipeline)
+  )
+
+  if (inPipeline) {
+    console.log(`[Ploomes] Deal no funil "${inPipeline.PipelineName}": "${inPipeline.Title}"`)
+    return inPipeline
+  }
+
+  // Fallback: deal mais recente (qualquer funil) — avisa
+  console.warn(`[Ploomes] ⚠️  Nenhum deal no funil "${targetPipeline}" para contact ${contactId} — usando mais recente (funil: "${deals[0].PipelineName}")`)
+  return deals[0]
 }
 
 export async function createInteraction(

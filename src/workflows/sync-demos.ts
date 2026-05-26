@@ -4,7 +4,7 @@ import { parseDocContent, extractTitleName } from '../tools/doc-parser'
 import { searchCompany, searchByEmail, getDeal, createInteraction, PloomesContact } from '../tools/ploomes'
 import { findEventForDoc } from '../tools/google-calendar'
 import { loadProcessed, saveEntry } from '../memory/processed-store'
-import { createRun, updateRun, logOutput, logDoc } from '../memory/supabase-store'
+import { createRun, updateRun, logOutput, logDoc, isRunning } from '../memory/supabase-store'
 
 const FOLDER_ID = process.env.DRIVE_FOLDER_ID!
 
@@ -78,6 +78,13 @@ async function findContact(
 }
 
 export async function syncDemos(options: { last24h?: boolean } = {}): Promise<void> {
+  // Evita execução dupla caso o cron dispare com dois processos rodando simultaneamente
+  const alreadyRunning = await isRunning()
+  if (alreadyRunning) {
+    console.warn('[sync-demos] ⚠️  Já existe uma execução em andamento — ignorando disparo duplicado')
+    return
+  }
+
   const runId = await createRun()
   const log = makeLogger(runId)
 
