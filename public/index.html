@@ -240,7 +240,9 @@
         ? '<span class="spinning" style="color:#818cf8;">⟳</span>'
         : run.status === 'done'
           ? '<span style="color:#4ade80;">✓</span>'
-          : '<span style="color:#f87171;">✗</span>'
+          : run.status === 'interrupted'
+            ? '<span style="color:#f59e0b;" title="Interrompido (processo reiniciado)">⚡</span>'
+            : '<span style="color:#f87171;">✗</span>'
 
       const counters = !isRunning && (run.total||0) > 0
         ? `<div style="margin-top:4px; display:flex; gap:8px; font-size:11px;">
@@ -295,7 +297,9 @@
       ? '<span style="background:rgba(99,102,241,.2); color:#818cf8; border:1px solid rgba(99,102,241,.3); padding:2px 10px; border-radius:20px; font-size:11px;">● Rodando</span>'
       : run.status === 'done'
         ? '<span style="background:rgba(74,222,128,.1); color:#4ade80; border:1px solid rgba(74,222,128,.2); padding:2px 10px; border-radius:20px; font-size:11px;">✓ Concluído</span>'
-        : '<span style="background:rgba(248,113,113,.1); color:#f87171; border:1px solid rgba(248,113,113,.2); padding:2px 10px; border-radius:20px; font-size:11px;">✗ Erro</span>'
+        : run.status === 'interrupted'
+          ? '<span style="background:rgba(245,158,11,.1); color:#f59e0b; border:1px solid rgba(245,158,11,.2); padding:2px 10px; border-radius:20px; font-size:11px;">⚡ Interrompido</span>'
+          : '<span style="background:rgba(248,113,113,.1); color:#f87171; border:1px solid rgba(248,113,113,.2); padding:2px 10px; border-radius:20px; font-size:11px;">✗ Erro</span>'
 
     document.getElementById('run-header').innerHTML = `
       <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">

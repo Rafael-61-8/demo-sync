@@ -3,10 +3,12 @@ import cron from 'node-cron'
 import { syncDemos, syncSingleDoc } from './workflows/sync-demos'
 import { startServer } from './server'
 import { supabase } from './tools/supabase'
+import { closeStaleRuns } from './memory/supabase-store'
 
 const SCHEDULE = process.env.CRON_SCHEDULE || '0 21 * * *'
 
 startServer()
+closeStaleRuns()
 
 console.log('🚀 demo-sync iniciado')
 console.log(`📅 Agendamento: ${SCHEDULE} (${process.env.TZ || 'America/Sao_Paulo'})`)
