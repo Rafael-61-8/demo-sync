@@ -1,10 +1,10 @@
 import 'dotenv/config'
-import { listNewDocs, readDocContent } from '../tools/google-drive'
+import { listNewDocs, readDocContent, getDocMeta } from '../tools/google-drive'
 import { parseDocContent, extractTitleName } from '../tools/doc-parser'
 import { searchCompany, searchByEmail, getDeal, createInteraction, PloomesContact } from '../tools/ploomes'
 import { findEventForDoc } from '../tools/google-calendar'
 import { loadProcessed, saveEntry } from '../memory/processed-store'
-import { createRun, updateRun, logOutput, logDoc, isRunning } from '../memory/supabase-store'
+import { createRun, updateRun, logOutput, logDoc, isRunning, updateTrigger } from '../memory/supabase-store'
 
 const FOLDER_ID = process.env.DRIVE_FOLDER_ID!
 
@@ -223,5 +223,89 @@ export async function syncDemos(options: { last24h?: boolean } = {}): Promise<vo
       })
     }
     throw err
+  }
+}
+
+// Processa um único documento manualmente (disparado pelo dashboard)
+export async function syncSingleDoc(docId: string, triggerId: string): Promise<void> {
+  const runId = await createRun()
+  const log = makeLogger(runId)
+
+  log.info(`\n${'='.repeat(50)}`)
+  log.info(`[manual] Processando doc ${docId} — ${new Date().toLocaleString('pt-BR')}`)
+  log.info('='.repeat(50))
+
+  try {
+    const meta = await getDocMeta(docId)
+    const doc = { id: docId, name: meta.name, createdTime: meta.createdTime }
+    log.info(`  Documento: "${doc.name}"`)
+
+    const content = await readDocContent(docId)
+
+    const parsed = parseDocContent(content, doc.name)
+    log.info(`  Empresa: "${parsed.empresa}" | Pessoa: "${parsed.pessoa}" (via ${parsed.source})`)
+
+    if (!parsed.resumo) {
+      log.warn('  ⚠️  Resumo vazio — abortando')
+      await updateRun(runId!, { finished_at: new Date().toISOString(), total: 1, error_count: 1, status: 'done' })
+      await updateTrigger(triggerId, 'error', { error: 'resumo vazio' })
+      return
+    }
+
+    const result = await findContact(parsed.empresa, doc.name, doc.createdTime, log)
+
+    if (!result) {
+      log.warn(`  ❌ Empresa não encontrada no Ploomes após todas as estratégias`)
+      if (runId) await logDoc(runId, { doc_id: docId, doc_title: doc.name, empresa: parsed.empresa, pessoa: parsed.pessoa, status: 'not_found', doc_date: doc.createdTime })
+      await updateRun(runId!, { finished_at: new Date().toISOString(), total: 1, not_found_count: 1, status: 'done' })
+      await updateTrigger(triggerId, 'not_found', { empresa: parsed.empresa })
+      return
+    }
+
+    const { contact, strategy, eventDate } = result
+    const docDate = eventDate || doc.createdTime
+    log.info(`  ✓ Encontrado via [${strategy}]: "${contact.Name}" (score: ${contact.score ?? 100})`)
+
+    const deal = await getDeal(contact.Id)
+    const dealId = deal?.Id || contact.LastDealId || null
+    log.info(`  Deal: ${deal ? `"${deal.Title}" (${dealId})` : 'nenhum'}`)
+
+    const interactionId = await createInteraction(
+      contact.Id,
+      dealId,
+      parsed.resumo,
+      parsed.empresa,
+      parsed.pessoa,
+      doc.name,
+      docDate
+    )
+
+    if (interactionId) {
+      log.success(`  ✅ Interação criada: ${interactionId} → ${contact.Name}`)
+      if (runId) await logDoc(runId, {
+        doc_id: docId,
+        doc_title: doc.name,
+        empresa: contact.Name,
+        pessoa: parsed.pessoa,
+        status: 'success',
+        interaction_id: interactionId,
+        match_score: contact.score != null ? Math.round(contact.score) : null,
+        contact_id: contact.Id,
+        search_strategy: strategy,
+        doc_date: docDate
+      })
+      await updateRun(runId!, { finished_at: new Date().toISOString(), total: 1, success_count: 1, status: 'done' })
+      await updateTrigger(triggerId, 'done', { contact: contact.Name, interactionId, dealId })
+    } else {
+      log.error(`  ❌ Falha ao criar interação`)
+      if (runId) await logDoc(runId, { doc_id: docId, doc_title: doc.name, empresa: contact.Name, pessoa: parsed.pessoa, status: 'error', notes: 'falha ao criar interação', contact_id: contact.Id, search_strategy: strategy, doc_date: docDate })
+      await updateRun(runId!, { finished_at: new Date().toISOString(), total: 1, error_count: 1, status: 'done' })
+      await updateTrigger(triggerId, 'error', { error: 'falha ao criar interação' })
+    }
+
+  } catch (err: any) {
+    log.error(`[manual] Erro: ${err.message}`)
+    if (runId) await updateRun(runId, { finished_at: new Date().toISOString(), total: 1, error_count: 1, status: 'error' })
+    await updateTrigger(triggerId, 'error', { error: err.message })
   }
 }

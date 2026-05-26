@@ -30,6 +30,16 @@ export async function listNewDocs(folderId: string, processedIds: Set<string>, l
   return files.filter(f => f.id && !processedIds.has(f.id)) as DriveDoc[]
 }
 
+export async function getDocMeta(docId: string): Promise<{ name: string; createdTime: string }> {
+  const auth = await getAuthClient()
+  const drive = google.drive({ version: 'v3', auth })
+  const res = await drive.files.get({ fileId: docId, fields: 'name,createdTime' })
+  return {
+    name: res.data.name || docId,
+    createdTime: res.data.createdTime || new Date().toISOString()
+  }
+}
+
 export async function readDocContent(docId: string): Promise<string> {
   const auth = await getAuthClient()
   const docs = google.docs({ version: 'v1', auth })
