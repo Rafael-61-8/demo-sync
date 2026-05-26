@@ -381,9 +381,7 @@
           <td style="padding:8px 16px; color:#64748b; text-align:center;">${doc.match_score != null ? doc.match_score : '—'}</td>
           <td style="padding:8px 16px; color:#4b5563; font-size:11px;">${doc.interaction_id || '—'}</td>
           <td style="padding:8px 16px;">
-            ${doc.status !== 'success'
-              ? `<button onclick="reprocessDoc('${esc(doc.doc_id)}')" style="background:rgba(99,102,241,.12); color:#818cf8; border:1px solid rgba(99,102,241,.2); border-radius:4px; padding:3px 10px; font-size:11px; cursor:pointer; white-space:nowrap;" onmouseover="this.style.background='rgba(99,102,241,.22)'" onmouseout="this.style.background='rgba(99,102,241,.12)'">↺ Reprocessar</button>`
-              : ''}
+            <button onclick="reprocessDoc('${esc(doc.doc_id)}')" style="background:rgba(99,102,241,.12); color:#818cf8; border:1px solid rgba(99,102,241,.2); border-radius:4px; padding:3px 10px; font-size:11px; cursor:pointer; white-space:nowrap;" onmouseover="this.style.background='rgba(99,102,241,.22)'" onmouseout="this.style.background='rgba(99,102,241,.12)'">↺ Reprocessar</button>
           </td>
         </tr>`
     }).join('')
