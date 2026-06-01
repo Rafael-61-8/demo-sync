@@ -33,11 +33,12 @@ function parseFollowUpDoc(content: string): ParsedFollowUp | null {
   try {
     const lines = content.split('\n').map(l => l.trim()).filter(Boolean)
 
-    const empresaLine = lines.find(l => l.startsWith('EMPRESA:'))
-    const pessoaLine = lines.find(l => l.startsWith('PESSOA:'))
+    // Busca EMPRESA: e PESSOA: em qualquer posição da linha (Tactiq pode juntar metadados na mesma linha)
+    const empresaLine = lines.find(l => l.includes('EMPRESA:'))
+    const pessoaLine = lines.find(l => l.includes('PESSOA:'))
 
-    const empresa = empresaLine?.replace('EMPRESA:', '').trim() || ''
-    const pessoa = pessoaLine?.replace('PESSOA:', '').trim() || ''
+    const empresa = empresaLine?.split('EMPRESA:')[1]?.split('\n')[0]?.trim() || ''
+    const pessoa = pessoaLine?.split('PESSOA:')[1]?.split('\n')[0]?.trim() || ''
 
     if (!empresa && !pessoa) return null
 
