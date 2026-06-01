@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { listNewDocs, readDocContent } from '../tools/google-drive'
-import { searchCompany, searchByEmail, getDeal, createInteraction } from '../tools/ploomes'
+import { searchCompany, getDeal, createFollowUpInteraction } from '../tools/ploomes'
 import { loadProcessed, saveEntry } from '../memory/processed-store'
 import { createRun, updateRun, logOutput, logDoc } from '../memory/supabase-store'
 
@@ -49,16 +49,27 @@ function parseFollowUpDoc(content: string): ParsedFollowUp | null {
       if (line) whatsapp.push(line.replace(`WHATSAPP ${i}:`, '').trim())
     }
 
-    // Extrai Emails
+    // Extrai Emails — corpo pode ser multilinha
     const emails: { assunto: string; corpo: string }[] = []
     for (let i = 1; i <= 3; i++) {
-      const line = lines.find(l => l.startsWith(`EMAIL ${i} -`))
-      if (line) {
-        const parts = line.replace(`EMAIL ${i} -`, '').split('| Corpo:')
-        const assunto = parts[0]?.replace('Assunto:', '').trim() || ''
-        const corpo = parts[1]?.trim() || ''
-        if (assunto) emails.push({ assunto, corpo })
+      const lineIdx = lines.findIndex(l => l.includes(`EMAIL ${i} -`))
+      if (lineIdx === -1) continue
+
+      const headerLine = lines[lineIdx]
+      const parts = headerLine.split('EMAIL ' + i + ' -')[1]?.split('| Corpo:') || []
+      const assunto = parts[0]?.replace('Assunto:', '').trim() || ''
+
+      // Corpo: primeira parte após "| Corpo:" + linhas seguintes até o próximo EMAIL ou "---"
+      const firstBodyPart = parts[1]?.trim() || ''
+      const extraLines: string[] = []
+      for (let j = lineIdx + 1; j < lines.length; j++) {
+        const next = lines[j]
+        if (next.includes(`EMAIL ${i + 1} -`) || next.startsWith('---') || next.startsWith('EMAIL ')) break
+        extraLines.push(next)
       }
+      const corpo = [firstBodyPart, ...extraLines].filter(Boolean).join('\n')
+
+      if (assunto) emails.push({ assunto, corpo })
     }
 
     return { empresa, pessoa, whatsapp, emails, raw: content }
@@ -68,12 +79,12 @@ function parseFollowUpDoc(content: string): ParsedFollowUp | null {
 }
 
 function buildFollowUpContent(parsed: ParsedFollowUp): string {
-  const wLines = parsed.whatsapp.map((msg, i) => `📱 WhatsApp ${i + 1}: ${msg}`).join('\n')
+  const wLines = parsed.whatsapp.map((msg, i) => `${i + 1}. ${msg}`).join('\n\n')
   const eLines = parsed.emails.map((e, i) =>
-    `📧 Email ${i + 1}\nAssunto: ${e.assunto}\n${e.corpo}`
+    `${i + 1}. Assunto: ${e.assunto}\n${e.corpo}`
   ).join('\n\n')
 
-  return `🤖 SUGESTÕES DE FOLLOW-UP\n\nPessoa: ${parsed.pessoa}\nEmpresa: ${parsed.empresa}\n\n━━━ WHATSAPP ━━━\n${wLines}\n\n━━━ EMAIL ━━━\n${eLines}`
+  return `SUGESTÕES DE FOLLOW-UP\n\nPessoa: ${parsed.pessoa} | Empresa: ${parsed.empresa}\n\n--- WHATSAPP ---\n\n${wLines}\n\n--- EMAIL ---\n\n${eLines}`
 }
 
 export async function syncFollowUps(options: { last24h?: boolean } = {}): Promise<void> {
@@ -137,12 +148,10 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
 
         const followUpContent = buildFollowUpContent(parsed)
 
-        const interactionId = await createInteraction(
+        const interactionId = await createFollowUpInteraction(
           contact.Id,
           dealId,
           followUpContent,
-          parsed.empresa,
-          parsed.pessoa,
           doc.name,
           doc.createdTime
         )

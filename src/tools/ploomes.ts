@@ -191,3 +191,34 @@ export async function createInteraction(
   const data = await res.json() as { value: { Id: number }[] }
   return data.value?.[0]?.Id || null
 }
+
+export async function createFollowUpInteraction(
+  contactId: number,
+  dealId: number | null,
+  content: string,
+  nomeReuniao: string,
+  dataReuniao?: string
+): Promise<number | null> {
+  const body = {
+    ContactId: contactId,
+    DealId: dealId || null,
+    Date: dataReuniao || new Date().toISOString(),
+    TypeId: 5,
+    Content: content
+  }
+
+  const res = await fetch(`${BASE_URL}/InteractionRecords`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(body)
+  })
+
+  if (!res.ok) {
+    const err = await res.text()
+    console.error(`[Ploomes] createFollowUpInteraction error ${res.status}:`, err)
+    return null
+  }
+
+  const data = await res.json() as { value: { Id: number }[] }
+  return data.value?.[0]?.Id || null
+}
