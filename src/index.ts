@@ -1,11 +1,13 @@
 import 'dotenv/config'
 import cron from 'node-cron'
 import { syncDemos, syncSingleDoc } from './workflows/sync-demos'
+import { syncFollowUps } from './workflows/sync-followups'
 import { startServer } from './server'
 import { supabase } from './tools/supabase'
 import { closeStaleRuns } from './memory/supabase-store'
 
 const SCHEDULE = process.env.CRON_SCHEDULE || '0 21 * * *'
+const SCHEDULE_FOLLOWUPS = process.env.CRON_FOLLOWUPS_SCHEDULE || '10 21 * * *'
 
 startServer()
 closeStaleRuns()
@@ -28,11 +30,24 @@ supabase
 if (process.argv.includes('--now')) {
   console.log('▶️  Executando agora (--now) — todos os docs não processados')
   syncDemos({ last24h: false }).catch(console.error)
+} else if (process.argv.includes('--followups')) {
+  console.log('▶️  Executando follow-ups agora (--followups)')
+  syncFollowUps({ last24h: false }).catch(console.error)
 } else {
+  const tz = process.env.TZ || 'America/Sao_Paulo'
+
   cron.schedule(SCHEDULE, () => {
     console.log('⏰ Cron disparado — processando docs das últimas 24h')
     syncDemos({ last24h: true }).catch(console.error)
-  }, { timezone: process.env.TZ || 'America/Sao_Paulo' })
+  }, { timezone: tz })
+
+  if (process.env.DRIVE_FOLLOWUPS_FOLDER_ID) {
+    cron.schedule(SCHEDULE_FOLLOWUPS, () => {
+      console.log('⏰ Cron follow-ups disparado — processando follow-ups das últimas 24h')
+      syncFollowUps({ last24h: true }).catch(console.error)
+    }, { timezone: tz })
+    console.log(`📅 Follow-ups: ${SCHEDULE_FOLLOWUPS} (${tz})`)
+  }
 
   console.log('✅ Aguardando próxima execução...')
 }

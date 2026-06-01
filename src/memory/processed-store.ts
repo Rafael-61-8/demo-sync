@@ -1,7 +1,11 @@
 import * as fs from 'fs'
 import * as path from 'path'
 
-const STORE_PATH = path.join(__dirname, '../../data/processed.json')
+const DATA_DIR = path.join(__dirname, '../../data')
+
+function storePath(key = 'processed') {
+  return path.join(DATA_DIR, `${key}.json`)
+}
 
 export interface ProcessedEntry {
   docId: string
@@ -13,22 +17,20 @@ export interface ProcessedEntry {
   error?: string
 }
 
-export function loadProcessed(): { ids: Set<string>; entries: ProcessedEntry[] } {
-  if (!fs.existsSync(STORE_PATH)) {
-    return { ids: new Set(), entries: [] }
-  }
-  const entries: ProcessedEntry[] = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'))
+export function loadProcessed(key = 'processed'): { ids: Set<string>; entries: ProcessedEntry[] } {
+  const p = storePath(key)
+  if (!fs.existsSync(p)) return { ids: new Set(), entries: [] }
+  const entries: ProcessedEntry[] = JSON.parse(fs.readFileSync(p, 'utf8'))
   const ids = new Set(entries.map(e => e.docId))
   return { ids, entries }
 }
 
-export function saveEntry(entry: ProcessedEntry): void {
-  const dir = path.dirname(STORE_PATH)
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-
-  const { entries } = loadProcessed()
+export function saveEntry(entry: ProcessedEntry, key = 'processed'): void {
+  const p = storePath(key)
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true })
+  const { entries } = loadProcessed(key)
   entries.push(entry)
-  fs.writeFileSync(STORE_PATH, JSON.stringify(entries, null, 2), 'utf8')
+  fs.writeFileSync(p, JSON.stringify(entries, null, 2), 'utf8')
 }
 
 export function getPendingReview(): ProcessedEntry[] {
