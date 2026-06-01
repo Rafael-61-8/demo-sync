@@ -14,6 +14,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.106.1",
     "@types/express": "^5.0.6",
     "dotenv": "^17.4.2",

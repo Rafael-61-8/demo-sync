@@ -4,7 +4,8 @@ import { parseDocContent, extractTitleName } from '../tools/doc-parser'
 import { searchCompany, searchByEmail, getDeal, createInteraction, PloomesContact } from '../tools/ploomes'
 import { findEventForDoc } from '../tools/google-calendar'
 import { loadProcessed, saveEntry } from '../memory/processed-store'
-import { createRun, updateRun, logOutput, logDoc, isRunning, updateTrigger } from '../memory/supabase-store'
+import { createRun, updateRun, logOutput, logDoc, isRunning, updateTrigger, saveFollowUps } from '../memory/supabase-store'
+import { generateFollowUps } from '../tools/follow-ups'
 
 const FOLDER_ID = process.env.DRIVE_FOLDER_ID!
 
@@ -155,6 +156,17 @@ export async function syncDemos(options: { last24h?: boolean } = {}): Promise<vo
 
         if (interactionId) {
           log.success(`  ✅ Interação criada: ${interactionId} → ${contact.Name}`)
+
+          // Gera follow-ups com Gemini em background (não bloqueia o fluxo)
+          if (process.env.GEMINI_API_KEY && parsed.resumo) {
+            generateFollowUps(parsed.resumo, parsed.empresa, parsed.pessoa).then(async followUps => {
+              if (followUps) {
+                log.info(`  💬 Follow-ups gerados (${followUps.whatsapp.length} WhatsApp, ${followUps.email.length} email)`)
+                await saveFollowUps({ interaction_id: interactionId, empresa: contact.Name, pessoa: parsed.pessoa, whatsapp: followUps.whatsapp, email: followUps.email })
+              }
+            }).catch(() => {})
+          }
+
           saveEntry({ docId: doc.id, docName: doc.name, empresa: contact.Name, interactionId, processedAt: new Date().toISOString(), status: 'success' })
           if (runId) await logDoc(runId, {
             doc_id: doc.id,
@@ -282,6 +294,16 @@ export async function syncSingleDoc(docId: string, triggerId: string): Promise<v
 
     if (interactionId) {
       log.success(`  ✅ Interação criada: ${interactionId} → ${contact.Name}`)
+
+      if (process.env.GEMINI_API_KEY && parsed.resumo) {
+        generateFollowUps(parsed.resumo, parsed.empresa, parsed.pessoa).then(async followUps => {
+          if (followUps) {
+            log.info(`  💬 Follow-ups gerados (${followUps.whatsapp.length} WhatsApp, ${followUps.email.length} email)`)
+            await saveFollowUps({ interaction_id: interactionId, empresa: contact.Name, pessoa: parsed.pessoa, whatsapp: followUps.whatsapp, email: followUps.email })
+          }
+        }).catch(() => {})
+      }
+
       if (runId) await logDoc(runId, {
         doc_id: docId,
         doc_title: doc.name,
