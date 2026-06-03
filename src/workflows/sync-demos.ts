@@ -4,7 +4,7 @@ import { parseDocContent, extractTitleName } from '../tools/doc-parser'
 import { searchCompany, searchByEmail, getDeal, createInteraction, PloomesContact } from '../tools/ploomes'
 import { findEventForDoc } from '../tools/google-calendar'
 import { loadProcessed, saveEntry } from '../memory/processed-store'
-import { createRun, updateRun, logOutput, logDoc, isRunning, updateTrigger, saveFollowUps } from '../memory/supabase-store'
+import { createRun, updateRun, logOutput, logDoc, isRunning, updateTrigger, saveFollowUps, getProcessedDocIds } from '../memory/supabase-store'
 import { generateFollowUps } from '../tools/follow-ups'
 
 const FOLDER_ID = process.env.DRIVE_FOLDER_ID!
@@ -98,7 +98,10 @@ export async function syncDemos(options: { last24h?: boolean } = {}): Promise<vo
   log.info('='.repeat(50))
 
   try {
-    const { ids: processedIds } = loadProcessed()
+    // Usa Supabase como fonte de verdade para docs já processados com sucesso
+    const supabaseProcessedIds = await getProcessedDocIds()
+    const { ids: localProcessedIds } = loadProcessed()
+    const processedIds = new Set([...supabaseProcessedIds, ...localProcessedIds])
     const docs = await listNewDocs(FOLDER_ID, processedIds, options.last24h)
 
     if (docs.length === 0) {

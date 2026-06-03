@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { listNewDocs, readDocContent } from '../tools/google-drive'
 import { searchCompany, getDeal, createFollowUpInteraction } from '../tools/ploomes'
 import { loadProcessed, saveEntry } from '../memory/processed-store'
-import { createRun, updateRun, logOutput, logDoc } from '../memory/supabase-store'
+import { createRun, updateRun, logOutput, logDoc, getProcessedDocIds } from '../memory/supabase-store'
 
 const FOLLOWUPS_FOLDER_ID = process.env.DRIVE_FOLLOWUPS_FOLDER_ID!
 
@@ -102,7 +102,9 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
   try {
     // Usa prefixo diferente no processed-store para não conflitar com sync-demos
     const processedKey = 'followups'
-    const { ids: processedIds } = loadProcessed(processedKey)
+    const supabaseProcessedIds = await getProcessedDocIds()
+    const { ids: localProcessedIds } = loadProcessed(processedKey)
+    const processedIds = new Set([...supabaseProcessedIds, ...localProcessedIds])
     const docs = await listNewDocs(FOLLOWUPS_FOLDER_ID, processedIds, options.last24h)
 
     if (docs.length === 0) {

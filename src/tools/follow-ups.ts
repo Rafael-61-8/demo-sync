@@ -13,7 +13,7 @@ export async function generateFollowUps(
   pessoa: string
 ): Promise<FollowUpSuggestions | null> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
     const prompt = `Você é especialista em vendas B2B de SaaS de RH. Com base neste resumo de demo, crie follow-ups personalizados usando APENAS informações presentes no resumo.
 
