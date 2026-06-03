@@ -6,8 +6,8 @@ import { startServer } from './server'
 import { supabase } from './tools/supabase'
 import { closeStaleRuns } from './memory/supabase-store'
 
-const SCHEDULE = process.env.CRON_SCHEDULE || '0 21 * * *'
-const SCHEDULE_FOLLOWUPS = process.env.CRON_FOLLOWUPS_SCHEDULE || '10 21 * * *'
+const SCHEDULE = process.env.CRON_SCHEDULE || '*/5 * * * *'
+const SCHEDULE_FOLLOWUPS = process.env.CRON_FOLLOWUPS_SCHEDULE || '*/5 * * * *'
 
 startServer()
 closeStaleRuns()
@@ -37,14 +37,14 @@ if (process.argv.includes('--now')) {
   const tz = process.env.TZ || 'America/Sao_Paulo'
 
   cron.schedule(SCHEDULE, () => {
-    console.log('⏰ Cron disparado — processando docs das últimas 24h')
-    syncDemos({ last24h: true }).catch(console.error)
+    console.log('⏰ Cron disparado — verificando docs novos')
+    syncDemos({ last24h: false }).catch(console.error)
   }, { timezone: tz })
 
   if (process.env.DRIVE_FOLLOWUPS_FOLDER_ID) {
     cron.schedule(SCHEDULE_FOLLOWUPS, () => {
-      console.log('⏰ Cron follow-ups disparado — processando follow-ups das últimas 24h')
-      syncFollowUps({ last24h: true }).catch(console.error)
+      console.log('⏰ Cron follow-ups disparado — verificando follow-ups novos')
+      syncFollowUps({ last24h: false }).catch(console.error)
     }, { timezone: tz })
     console.log(`📅 Follow-ups: ${SCHEDULE_FOLLOWUPS} (${tz})`)
   }
