@@ -37,14 +37,14 @@ if (process.argv.includes('--now')) {
   const tz = process.env.TZ || 'America/Sao_Paulo'
 
   cron.schedule(SCHEDULE, () => {
-    console.log('⏰ Cron disparado — verificando docs novos')
-    syncDemos({ last24h: false }).catch(console.error)
+    console.log('⏰ Cron disparado — verificando docs das últimas 48h')
+    syncDemos({ hoursBack: 48 }).catch(console.error)
   }, { timezone: tz })
 
   if (process.env.DRIVE_FOLLOWUPS_FOLDER_ID) {
     cron.schedule(SCHEDULE_FOLLOWUPS, () => {
-      console.log('⏰ Cron follow-ups disparado — verificando follow-ups novos')
-      syncFollowUps({ last24h: false }).catch(console.error)
+      console.log('⏰ Cron follow-ups disparado — verificando follow-ups das últimas 48h')
+      syncFollowUps({ hoursBack: 48 }).catch(console.error)
     }, { timezone: tz })
     console.log(`📅 Follow-ups: ${SCHEDULE_FOLLOWUPS} (${tz})`)
   }

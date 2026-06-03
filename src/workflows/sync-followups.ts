@@ -87,7 +87,7 @@ function buildFollowUpContent(parsed: ParsedFollowUp): string {
   return `SUGESTÕES DE FOLLOW-UP\n\nPessoa: ${parsed.pessoa} | Empresa: ${parsed.empresa}\n\n--- WHATSAPP ---\n\n${wLines}\n\n--- EMAIL ---\n\n${eLines}`
 }
 
-export async function syncFollowUps(options: { last24h?: boolean } = {}): Promise<void> {
+export async function syncFollowUps(options: { last24h?: boolean; hoursBack?: number } = {}): Promise<void> {
   const runId = await createRun()
   const log = makeLogger(runId)
 
@@ -101,11 +101,8 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
 
   try {
     // Usa prefixo diferente no processed-store para não conflitar com sync-demos
-    const processedKey = 'followups'
-    const supabaseProcessedIds = await getProcessedDocIds()
-    const { ids: localProcessedIds } = loadProcessed(processedKey)
-    const processedIds = new Set([...supabaseProcessedIds, ...localProcessedIds])
-    const docs = await listNewDocs(FOLLOWUPS_FOLDER_ID, processedIds, options.last24h)
+    const processedIds = await getProcessedDocIds()
+    const docs = await listNewDocs(FOLLOWUPS_FOLDER_ID, processedIds, options.last24h, options.hoursBack)
 
     if (docs.length === 0) {
       log.info('[sync-followups] Nenhum follow-up novo encontrado.')
@@ -124,7 +121,7 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
 
         if (!parsed || (!parsed.empresa && !parsed.pessoa)) {
           log.warn('  ⚠️  Não foi possível identificar empresa/pessoa — pulando')
-          saveEntry({ docId: doc.id, docName: doc.name, empresa: '', interactionId: null, processedAt: new Date().toISOString(), status: 'error', error: 'sem empresa/pessoa' }, processedKey)
+          saveEntry({ docId: doc.id, docName: doc.name, empresa: '', interactionId: null, processedAt: new Date().toISOString(), status: 'error', error: 'sem empresa/pessoa' }, 'followups')
           errorCount++
           continue
         }
@@ -137,7 +134,7 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
 
         if (!contact) {
           log.warn(`  ❌ Empresa não encontrada no Ploomes: "${parsed.empresa}"`)
-          saveEntry({ docId: doc.id, docName: doc.name, empresa: parsed.empresa, interactionId: null, processedAt: new Date().toISOString(), status: 'not_found' }, processedKey)
+          saveEntry({ docId: doc.id, docName: doc.name, empresa: parsed.empresa, interactionId: null, processedAt: new Date().toISOString(), status: 'not_found' }, 'followups')
           await logDoc(runId!, { doc_id: doc.id, doc_title: doc.name, empresa: parsed.empresa, pessoa: parsed.pessoa, status: 'not_found' })
           notFoundCount++
           continue
@@ -160,12 +157,12 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
 
         if (interactionId) {
           log.success(`  ✅ Follow-up enviado ao Ploomes: ${interactionId} → ${contact.Name}`)
-          saveEntry({ docId: doc.id, docName: doc.name, empresa: contact.Name, interactionId, processedAt: new Date().toISOString(), status: 'success' }, processedKey)
+          saveEntry({ docId: doc.id, docName: doc.name, empresa: contact.Name, interactionId, processedAt: new Date().toISOString(), status: 'success' }, 'followups')
           await logDoc(runId!, { doc_id: doc.id, doc_title: doc.name, empresa: contact.Name, pessoa: parsed.pessoa, status: 'success', interaction_id: interactionId, contact_id: contact.Id, doc_date: doc.createdTime })
           successCount++
         } else {
           log.error(`  ❌ Falha ao criar interação no Ploomes`)
-          saveEntry({ docId: doc.id, docName: doc.name, empresa: contact.Name, interactionId: null, processedAt: new Date().toISOString(), status: 'error', error: 'falha ao criar interação' }, processedKey)
+          saveEntry({ docId: doc.id, docName: doc.name, empresa: contact.Name, interactionId: null, processedAt: new Date().toISOString(), status: 'error', error: 'falha ao criar interação' }, 'followups')
           errorCount++
         }
 
@@ -173,7 +170,7 @@ export async function syncFollowUps(options: { last24h?: boolean } = {}): Promis
 
       } catch (err: any) {
         log.error(`  ❌ Erro: ${err.message}`)
-        saveEntry({ docId: doc.id, docName: doc.name, empresa: '', interactionId: null, processedAt: new Date().toISOString(), status: 'error', error: err.message }, processedKey)
+        saveEntry({ docId: doc.id, docName: doc.name, empresa: '', interactionId: null, processedAt: new Date().toISOString(), status: 'error', error: err.message }, 'followups')
         errorCount++
       }
     }

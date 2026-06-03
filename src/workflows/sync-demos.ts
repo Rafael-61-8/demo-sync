@@ -78,7 +78,7 @@ async function findContact(
   return null
 }
 
-export async function syncDemos(options: { last24h?: boolean } = {}): Promise<void> {
+export async function syncDemos(options: { last24h?: boolean; hoursBack?: number } = {}): Promise<void> {
   // Evita execução dupla caso o cron dispare com dois processos rodando simultaneamente
   const alreadyRunning = await isRunning()
   if (alreadyRunning) {
@@ -98,11 +98,9 @@ export async function syncDemos(options: { last24h?: boolean } = {}): Promise<vo
   log.info('='.repeat(50))
 
   try {
-    // Usa Supabase como fonte de verdade para docs já processados com sucesso
-    const supabaseProcessedIds = await getProcessedDocIds()
-    const { ids: localProcessedIds } = loadProcessed()
-    const processedIds = new Set([...supabaseProcessedIds, ...localProcessedIds])
-    const docs = await listNewDocs(FOLDER_ID, processedIds, options.last24h)
+    // Supabase é a fonte de verdade — docs já processados com sucesso não são reprocessados
+    const processedIds = await getProcessedDocIds()
+    const docs = await listNewDocs(FOLDER_ID, processedIds, options.last24h, options.hoursBack)
 
     if (docs.length === 0) {
       log.info('[sync-demos] Nenhum doc novo encontrado.')

@@ -8,13 +8,16 @@ export interface DriveDoc {
   modifiedTime: string
 }
 
-export async function listNewDocs(folderId: string, processedIds: Set<string>, last24h = false): Promise<DriveDoc[]> {
+export async function listNewDocs(folderId: string, processedIds: Set<string>, last24h = false, hoursBack?: number): Promise<DriveDoc[]> {
   const auth = await getAuthClient()
   const drive = google.drive({ version: 'v3', auth })
 
   let query = `'${folderId}' in parents and mimeType='application/vnd.google-apps.document' and trashed=false`
 
-  if (last24h) {
+  if (hoursBack) {
+    const since = new Date(Date.now() - hoursBack * 60 * 60 * 1000).toISOString()
+    query += ` and createdTime > '${since}'`
+  } else if (last24h) {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     query += ` and createdTime > '${yesterday}'`
   }
