@@ -13,7 +13,8 @@
   </script>
   <style>
     * { box-sizing: border-box; }
-    html, body { height: 100%; margin: 0; background: #0b0b13; color: #cbd5e1; font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; font-size: 13px; }
+    html, body { height: 100%; margin: 0; background: #0b0b13; color: #cbd5e1; font-family: -apple-system, 'Inter', 'Segoe UI', sans-serif; font-size: 13px; }
+    .mono { font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace; }
     ::-webkit-scrollbar { width: 4px; height: 4px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #2d2d42; border-radius: 2px; }
@@ -31,6 +32,14 @@
     .stat-card { background: #12121e; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px 20px; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     .spinning { display: inline-block; animation: spin 1.2s linear infinite; }
+    .filter-btn { padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: 1px solid transparent; background: transparent; color: #4b5563; }
+    .filter-btn:hover { background: #1e1e2e; color: #cbd5e1; }
+    .filter-btn.active { background: #1e1e2e; border-color: #2d2d42; color: #cbd5e1; }
+    .doc-row { border-bottom: 1px solid rgba(30,30,46,.8); }
+    .doc-row:hover .row-actions { opacity: 1; }
+    .row-actions { opacity: 0; transition: opacity 0.15s; }
+    .score-bar { display:inline-flex; align-items:center; gap:5px; }
+    .score-pip { width:28px; height:4px; border-radius:2px; }
   </style>
 </head>
 <body>
@@ -100,9 +109,17 @@
 
       <!-- Tabs -->
       <div id="run-tabs" style="display:none; padding:8px 24px; border-bottom:1px solid #1e1e2e; flex-shrink:0;">
-        <div style="display:flex; gap:4px;">
-          <button class="tab-btn active" id="tab-logs" onclick="switchTab('logs')">Logs</button>
-          <button class="tab-btn inactive" id="tab-docs" onclick="switchTab('docs')">Documentos</button>
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div style="display:flex; gap:4px;">
+            <button class="tab-btn active" id="tab-logs" onclick="switchTab('logs')">Logs <span id="tab-logs-count" style="opacity:.6;"></span></button>
+            <button class="tab-btn inactive" id="tab-docs" onclick="switchTab('docs')">Documentos <span id="tab-docs-count" style="opacity:.6;"></span></button>
+          </div>
+          <div id="docs-filter" style="display:none; gap:4px; display:none;">
+            <button class="filter-btn active" onclick="filterDocs('all')" id="filter-all">Todos</button>
+            <button class="filter-btn" onclick="filterDocs('success')" id="filter-success" style="color:#4ade80;">✓ Sucesso</button>
+            <button class="filter-btn" onclick="filterDocs('not_found')" id="filter-nf" style="color:#fbbf24;">⚠ Não encontrado</button>
+            <button class="filter-btn" onclick="filterDocs('error')" id="filter-error" style="color:#f87171;">✗ Erro</button>
+          </div>
         </div>
       </div>
 
@@ -110,7 +127,7 @@
       <div style="flex:1; overflow:hidden; position:relative;">
 
         <!-- Logs Panel -->
-        <div id="panel-logs" style="position:absolute; inset:0; overflow-y:auto; padding:12px 20px; line-height:1.7;">
+        <div id="panel-logs" style="position:absolute; inset:0; overflow-y:auto; padding:12px 20px; line-height:1.7; font-family:'SF Mono','Fira Code','Consolas',monospace; font-size:12px;">
           <div style="color:#374151; text-align:center; padding:40px 0; font-size:12px;">Selecione uma execução</div>
         </div>
 
@@ -186,6 +203,8 @@
   let runs = []
   let currentRunId = null
   let realtimeChannel = null
+  let currentDocs = []
+  let currentDocsFilter = 'all'
 
   // ── Init ─────────────────────────────────────────────────────────────
   async function init() {
@@ -376,7 +395,26 @@
   // ── Docs ──────────────────────────────────────────────────────────────
   async function loadDocs(runId) {
     const { data } = await sb.from('sync_logs').select('*').eq('run_id', runId).order('created_at', { ascending: true })
-    renderDocsTable(data || [])
+    currentDocs = data || []
+    currentDocsFilter = 'all'
+    updateTabCounts()
+    renderDocsTable(currentDocs)
+  }
+
+  function updateTabCounts() {
+    const { data: logs } = { data: null }
+    // Contagem de logs no painel de logs via DOM
+    const logLines = document.getElementById('panel-logs').children.length
+    document.getElementById('tab-logs-count').textContent = logLines > 0 ? `(${logLines})` : ''
+    document.getElementById('tab-docs-count').textContent = currentDocs.length > 0 ? `(${currentDocs.length})` : ''
+  }
+
+  function filterDocs(status) {
+    currentDocsFilter = status
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'))
+    document.getElementById('filter-' + (status === 'not_found' ? 'nf' : status)).classList.add('active')
+    const filtered = status === 'all' ? currentDocs : currentDocs.filter(d => d.status === status)
+    renderDocsTable(filtered)
   }
 
   function renderDocsTable(docs) {
@@ -390,34 +428,46 @@
     empty.style.display = 'none'
     tbody.innerHTML = docs.map(doc => {
       const badge = doc.status === 'success'
-        ? '<span style="color:#4ade80; background:rgba(74,222,128,.08); padding:2px 8px; border-radius:4px;">✅ sucesso</span>'
+        ? '<span style="color:#4ade80; background:rgba(74,222,128,.08); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">✓ sucesso</span>'
         : doc.status === 'not_found'
-          ? '<span style="color:#fbbf24; background:rgba(251,191,36,.08); padding:2px 8px; border-radius:4px;">⚠️ não encontrado</span>'
-          : '<span style="color:#f87171; background:rgba(248,113,113,.08); padding:2px 8px; border-radius:4px;">❌ erro</span>'
+          ? '<span style="color:#fbbf24; background:rgba(251,191,36,.08); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">⚠ não encontrado</span>'
+          : '<span style="color:#f87171; background:rgba(248,113,113,.08); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:500;">✗ erro</span>'
       const title = esc(truncate(doc.doc_title || '—', 40))
       const rawDate = doc.doc_date || doc.created_at
       const docDate = rawDate
         ? new Date(rawDate).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' })
         : '—'
-      const strategyLabel = doc.search_strategy
-        ? doc.search_strategy.startsWith('email:') ? '📧 email'
-          : doc.search_strategy === 'title' ? '🔤 título'
-          : doc.search_strategy.startsWith('calendar-company:') ? '📅 agenda'
-          : doc.search_strategy === 'json' ? '📄 json'
-          : doc.search_strategy
-        : '—'
+      const strategyMap = {
+        'json': { icon: '📄', label: 'Extraído do JSON do doc' },
+        'title': { icon: '🔤', label: 'Nome do título do doc' },
+      }
+      let stratIcon = '—', stratTitle = ''
+      if (doc.search_strategy) {
+        if (doc.search_strategy.startsWith('email:')) { stratIcon = '📧'; stratTitle = 'Encontrado por email: ' + doc.search_strategy.split(':')[1] }
+        else if (doc.search_strategy.startsWith('calendar-company:')) { stratIcon = '📅'; stratTitle = 'Empresa da agenda: ' + doc.search_strategy.split(':')[1] }
+        else if (strategyMap[doc.search_strategy]) { stratIcon = strategyMap[doc.search_strategy].icon; stratTitle = strategyMap[doc.search_strategy].label }
+        else { stratIcon = doc.search_strategy }
+      }
+      const score = doc.match_score != null ? doc.match_score : null
+      const scoreColor = score === null ? '#374151' : score >= 80 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#f87171'
+      const scoreHtml = score !== null
+        ? `<div class="score-bar"><div class="score-pip" style="background:${scoreColor}; width:${score * 0.28}px;"></div><span style="color:${scoreColor}; font-size:11px;">${score}</span></div>`
+        : '<span style="color:#374151;">—</span>'
+      const interactionHtml = doc.interaction_id
+        ? `<a href="https://app.ploomes.com/negocios?id=${doc.contact_id || ''}" target="_blank" style="color:#818cf8; font-family:'SF Mono',monospace; font-size:11px; text-decoration:none;" title="Abrir no Ploomes" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${doc.interaction_id} ↗</a>`
+        : '<span style="color:#374151;">—</span>'
       return `
-        <tr style="border-bottom:1px solid rgba(30,30,46,.8);" onmouseover="this.style.background='rgba(30,30,46,.4)'" onmouseout="this.style.background=''">
-          <td style="padding:8px 16px; color:#4b5563; white-space:nowrap; font-size:11px;">${docDate}</td>
-          <td style="padding:8px 16px; color:#cbd5e1; max-width:260px;" title="${esc(doc.doc_title||'')}">${title}</td>
+        <tr class="doc-row" onmouseover="this.style.background='rgba(30,30,46,.4)'" onmouseout="this.style.background=''">
+          <td style="padding:8px 16px; color:#4b5563; white-space:nowrap; font-size:11px; font-family:'SF Mono',monospace;">${docDate}</td>
+          <td style="padding:8px 16px; color:#cbd5e1; max-width:240px;" title="${esc(doc.doc_title||'')}">${title}</td>
           <td style="padding:8px 16px; color:#94a3b8; white-space:nowrap;">${esc(doc.empresa||'—')}</td>
           <td style="padding:8px 16px; color:#64748b; white-space:nowrap;">${esc(doc.pessoa||'—')}</td>
           <td style="padding:8px 16px; white-space:nowrap;">${badge}</td>
-          <td style="padding:8px 16px; color:#64748b; font-size:11px; white-space:nowrap;">${strategyLabel}</td>
-          <td style="padding:8px 16px; color:#64748b; text-align:center;">${doc.match_score != null ? doc.match_score : '—'}</td>
-          <td style="padding:8px 16px; color:#4b5563; font-size:11px;">${doc.interaction_id || '—'}</td>
-          <td style="padding:8px 16px;">
-            <button onclick="reprocessDoc('${esc(doc.doc_id)}')" style="background:rgba(99,102,241,.12); color:#818cf8; border:1px solid rgba(99,102,241,.2); border-radius:4px; padding:3px 10px; font-size:11px; cursor:pointer; white-space:nowrap;" onmouseover="this.style.background='rgba(99,102,241,.22)'" onmouseout="this.style.background='rgba(99,102,241,.12)'">↺ Reprocessar</button>
+          <td style="padding:8px 16px; text-align:center;" title="${stratTitle}">${stratIcon}</td>
+          <td style="padding:8px 16px;">${scoreHtml}</td>
+          <td style="padding:8px 16px;">${interactionHtml}</td>
+          <td style="padding:8px 16px;" class="row-actions">
+            <button onclick="reprocessDoc('${esc(doc.doc_id)}')" style="background:rgba(99,102,241,.12); color:#818cf8; border:1px solid rgba(99,102,241,.2); border-radius:4px; padding:3px 10px; font-size:11px; cursor:pointer; white-space:nowrap;" onmouseover="this.style.background='rgba(99,102,241,.22)'" onmouseout="this.style.background='rgba(99,102,241,.12)'">↺</button>
           </td>
         </tr>`
     }).join('')
@@ -450,6 +500,8 @@
     document.getElementById('panel-docs').style.display = isLogs ? 'none' : 'block'
     document.getElementById('tab-logs').className = `tab-btn ${isLogs ? 'active' : 'inactive'}`
     document.getElementById('tab-docs').className = `tab-btn ${isLogs ? 'inactive' : 'active'}`
+    document.getElementById('docs-filter').style.display = isLogs ? 'none' : 'flex'
+    if (!isLogs) updateTabCounts()
   }
 
   // ── Not Found Modal ───────────────────────────────────────────────────
