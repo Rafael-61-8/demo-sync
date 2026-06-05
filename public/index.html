@@ -58,19 +58,21 @@
   <!-- Stats Bar -->
   <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px; padding:16px 24px; border-bottom:1px solid #1e1e2e; flex-shrink:0;">
     <div class="stat-card">
-      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Total de Syncs</div>
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Execuções</div>
       <div id="stat-runs" style="color:#fff; font-size:26px; font-weight:700;">—</div>
     </div>
     <div class="stat-card">
-      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Docs Processados</div>
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Docs Únicos</div>
       <div id="stat-total" style="color:#fff; font-size:26px; font-weight:700;">—</div>
+      <div style="color:#374151; font-size:10px; margin-top:2px;">sem duplicatas</div>
     </div>
     <div class="stat-card">
       <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Taxa de Sucesso</div>
       <div id="stat-rate" style="color:#4ade80; font-size:26px; font-weight:700;">—</div>
+      <div style="color:#374151; font-size:10px; margin-top:2px;">por doc único</div>
     </div>
-    <div class="stat-card">
-      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Não Encontrados</div>
+    <div class="stat-card" style="cursor:pointer;" onclick="showNotFound()" title="Clique para ver os não encontrados">
+      <div style="color:#64748b; font-size:11px; text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;">Não Encontrados ↗</div>
       <div id="stat-nf" style="color:#fbbf24; font-size:26px; font-weight:700;">—</div>
     </div>
   </div>
@@ -138,6 +140,20 @@
   </div>
 </div>
 
+<!-- Modal: Não Encontrados -->
+<div id="nf-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:#12121e; border:1px solid #2d2d42; border-radius:12px; padding:28px 32px; width:640px; max-width:94vw; max-height:80vh; display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+      <span style="color:#fff; font-weight:600; font-size:15px;">⚠️ Não encontrados no Ploomes</span>
+      <button onclick="document.getElementById('nf-modal').style.display='none'" style="background:none; border:none; color:#4b5563; font-size:18px; cursor:pointer;">✕</button>
+    </div>
+    <div style="color:#64748b; font-size:12px; margin-bottom:16px;">Docs que tentamos enviar mas a empresa não foi encontrada no Ploomes. Clique em "↺ Reprocessar" para tentar novamente.</div>
+    <div id="nf-list" style="overflow-y:auto; flex:1;">
+      <div style="color:#374151; text-align:center; padding:24px;">Carregando...</div>
+    </div>
+  </div>
+</div>
+
 <!-- Modal: Enviar documento manualmente -->
 <div id="send-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100; align-items:center; justify-content:center;">
   <div style="background:#12121e; border:1px solid #2d2d42; border-radius:12px; padding:28px 32px; width:480px; max-width:90vw;">
@@ -199,17 +215,33 @@
 
   // ── Stats ─────────────────────────────────────────────────────────────
   async function loadStats() {
-    const { data } = await sb.from('sync_runs').select('total,success_count,not_found_count,error_count,status')
-    if (!data || data.length === 0) {
+    // Busca todos os logs e deduplica por doc_id (mais recente por doc)
+    const { data: logs } = await sb.from('sync_logs')
+      .select('doc_id,status')
+      .order('created_at', { ascending: false })
+
+    if (!logs || logs.length === 0) {
       ['stat-runs','stat-total','stat-rate','stat-nf'].forEach(id => document.getElementById(id).textContent = '0')
       return
     }
-    const done = data.filter(r => r.status !== 'running')
-    const total = done.reduce((s,r) => s + (r.total||0), 0)
-    const success = done.reduce((s,r) => s + (r.success_count||0), 0)
-    const nf = done.reduce((s,r) => s + (r.not_found_count||0), 0)
-    const rate = total > 0 ? Math.round(success/total*100) : 0
-    document.getElementById('stat-runs').textContent = done.length
+
+    // Mantém apenas o status mais recente por doc_id
+    const seen = new Map()
+    for (const row of logs) {
+      if (!seen.has(row.doc_id)) seen.set(row.doc_id, row.status)
+    }
+
+    const uniqueDocs = Array.from(seen.values())
+    const total = uniqueDocs.length
+    const success = uniqueDocs.filter(s => s === 'success').length
+    const nf = uniqueDocs.filter(s => s === 'not_found').length
+    const rate = total > 0 ? Math.round(success / total * 100) : 0
+
+    // Número de syncs (runs finalizadas)
+    const { data: runs } = await sb.from('sync_runs').select('status')
+    const doneRuns = (runs || []).filter(r => r.status !== 'running').length
+
+    document.getElementById('stat-runs').textContent = doneRuns
     document.getElementById('stat-total').textContent = total
     document.getElementById('stat-rate').textContent = total > 0 ? rate + '%' : '—'
     document.getElementById('stat-nf').textContent = nf
@@ -420,6 +452,51 @@
     document.getElementById('tab-docs').className = `tab-btn ${isLogs ? 'inactive' : 'active'}`
   }
 
+  // ── Not Found Modal ───────────────────────────────────────────────────
+  async function showNotFound() {
+    document.getElementById('nf-modal').style.display = 'flex'
+    const el = document.getElementById('nf-list')
+    el.innerHTML = '<div style="color:#374151; text-align:center; padding:24px;">Carregando...</div>'
+
+    const { data: logs } = await sb.from('sync_logs')
+      .select('doc_id,doc_title,empresa,pessoa,created_at')
+      .eq('status', 'not_found')
+      .order('created_at', { ascending: false })
+
+    // Deduplica por doc_id
+    const seen = new Map()
+    for (const row of (logs || [])) {
+      if (!seen.has(row.doc_id)) seen.set(row.doc_id, row)
+    }
+    const unique = Array.from(seen.values())
+
+    if (unique.length === 0) {
+      el.innerHTML = '<div style="color:#4ade80; text-align:center; padding:24px;">✓ Nenhum doc pendente!</div>'
+      return
+    }
+
+    el.innerHTML = unique.map(d => {
+      const dt = new Date(d.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit' })
+      return `<div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid #1e1e2e; gap:12px;">
+        <div style="flex:1; min-width:0;">
+          <div style="color:#cbd5e1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(d.doc_title||'—')}</div>
+          <div style="color:#4b5563; font-size:11px; margin-top:2px;">${dt} ${d.empresa ? '· ' + esc(d.empresa) : ''}</div>
+        </div>
+        <button onclick="reprocessDoc('${esc(d.doc_id)}'); this.textContent='Enviado ✓'; this.disabled=true; this.style.opacity='.5';"
+          style="background:rgba(99,102,241,.12); color:#818cf8; border:1px solid rgba(99,102,241,.2); border-radius:4px; padding:4px 12px; font-size:11px; cursor:pointer; white-space:nowrap;">
+          ↺ Reprocessar
+        </button>
+      </div>`
+    }).join('')
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closeSendModal()
+      document.getElementById('nf-modal').style.display = 'none'
+    }
+  })
+
   // ── Manual Trigger ────────────────────────────────────────────────────
   function openSendModal() {
     document.getElementById('send-modal').style.display = 'flex'
@@ -502,9 +579,7 @@
     return s.length > n ? s.slice(0, n) + '…' : s
   }
 
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeSendModal()
-  })
+  // keydown Escape já tratado acima
   document.getElementById('send-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('send-modal')) closeSendModal()
   })
