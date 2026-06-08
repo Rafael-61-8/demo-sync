@@ -4,7 +4,7 @@ import { syncDemos, syncSingleDoc } from './workflows/sync-demos'
 import { syncFollowUps } from './workflows/sync-followups'
 import { startServer } from './server'
 import { supabase } from './tools/supabase'
-import { closeStaleRuns } from './memory/supabase-store'
+import { closeStaleRuns, cleanOldOutputs } from './memory/supabase-store'
 
 // Seg–Sex, 8h–17h55 (último disparo 17:55), horário de São Paulo
 const SCHEDULE = process.env.CRON_SCHEDULE || '*/5 8-17 * * 1-5'
@@ -12,6 +12,7 @@ const SCHEDULE_FOLLOWUPS = process.env.CRON_FOLLOWUPS_SCHEDULE || '*/5 8-17 * * 
 
 startServer()
 closeStaleRuns()
+cleanOldOutputs()
 
 console.log('🚀 demo-sync iniciado')
 console.log(`📅 Agendamento: ${SCHEDULE} (${process.env.TZ || 'America/Sao_Paulo'})`)
@@ -38,6 +39,7 @@ if (process.argv.includes('--now')) {
   const tz = process.env.TZ || 'America/Sao_Paulo'
 
   cron.schedule(SCHEDULE, () => {
+    cleanOldOutputs().catch(console.error)
     console.log('⏰ Cron disparado — verificando docs das últimas 48h')
     syncDemos({ hoursBack: 48 }).catch(console.error)
   }, { timezone: tz })
