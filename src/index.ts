@@ -6,8 +6,9 @@ import { startServer } from './server'
 import { supabase } from './tools/supabase'
 import { closeStaleRuns } from './memory/supabase-store'
 
-const SCHEDULE = process.env.CRON_SCHEDULE || '*/5 * * * *'
-const SCHEDULE_FOLLOWUPS = process.env.CRON_FOLLOWUPS_SCHEDULE || '*/5 * * * *'
+// Seg–Sex, 8h–17h55 (último disparo 17:55), horário de São Paulo
+const SCHEDULE = process.env.CRON_SCHEDULE || '*/5 8-17 * * 1-5'
+const SCHEDULE_FOLLOWUPS = process.env.CRON_FOLLOWUPS_SCHEDULE || '*/5 8-17 * * 1-5'
 
 startServer()
 closeStaleRuns()
