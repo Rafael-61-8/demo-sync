@@ -1,6 +1,7 @@
 import express from 'express'
 import path from 'path'
 import { supabase } from './tools/supabase'
+import { syncFollowUps } from './workflows/sync-followups'
 
 const PORT = parseInt(process.env.DASHBOARD_PORT || '3000')
 const CLEANUP_TOKEN = process.env.CLEANUP_TOKEN || 'recrutei-cleanup-2026'
@@ -75,6 +76,25 @@ export function startServer() {
     } catch (err: any) {
       console.error('[cleanup-dupes] Erro:', err.message)
     }
+  })
+
+  // Deleta uma interação específica do Ploomes pelo ID
+  app.get('/api/delete-interaction', async (req, res) => {
+    if (req.query.token !== CLEANUP_TOKEN) return res.status(401).json({ error: 'Unauthorized' })
+    const id = req.query.id
+    if (!id) return res.status(400).json({ error: 'id obrigatorio' })
+    const r = await fetch(`https://api2.ploomes.com/InteractionRecords(${id})`, {
+      method: 'DELETE',
+      headers: { 'User-Key': process.env.PLOOMES_USER_KEY! }
+    })
+    res.json({ id, status: r.status, ok: r.ok || r.status === 404 })
+  })
+
+  // Roda o sync de follow-ups manualmente
+  app.get('/api/run-followups', async (req, res) => {
+    if (req.query.token !== CLEANUP_TOKEN) return res.status(401).json({ error: 'Unauthorized' })
+    res.json({ started: true })
+    syncFollowUps({ hoursBack: 48 }).catch(console.error)
   })
 
   app.listen(PORT, () => {
