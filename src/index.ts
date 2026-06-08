@@ -5,6 +5,7 @@ import { syncFollowUps } from './workflows/sync-followups'
 import { startServer } from './server'
 import { supabase } from './tools/supabase'
 import { closeStaleRuns, cleanOldOutputs } from './memory/supabase-store'
+import { runCleanupDuplicates } from './scripts/cleanup-duplicates'
 
 // Seg–Sex, 8h–17h55 (último disparo 17:55), horário de São Paulo
 const SCHEDULE = process.env.CRON_SCHEDULE || '*/5 8-17 * * 1-5'
@@ -23,7 +24,12 @@ supabase
   .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'manual_triggers' }, async (payload) => {
     const { id, doc_id } = payload.new as { id: string; doc_id: string }
     console.log(`📨 Trigger manual recebido: doc_id=${doc_id}`)
-    syncSingleDoc(doc_id, id).catch(console.error)
+    if (doc_id === '__cleanup_dupes__') {
+      console.log('🧹 Iniciando limpeza de interações duplicadas no Ploomes...')
+      runCleanupDuplicates().catch(console.error)
+    } else {
+      syncSingleDoc(doc_id, id).catch(console.error)
+    }
   })
   .subscribe((status) => {
     if (status === 'SUBSCRIBED') console.log('🔔 Realtime: escutando manual_triggers')
