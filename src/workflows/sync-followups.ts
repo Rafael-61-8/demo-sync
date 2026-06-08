@@ -42,11 +42,21 @@ function parseFollowUpDoc(content: string): ParsedFollowUp | null {
 
     if (!empresa && !pessoa) return null
 
-    // Extrai WhatsApp
+    // Extrai WhatsApp — mensagem pode ter múltiplas linhas
     const whatsapp: string[] = []
     for (let i = 1; i <= 3; i++) {
-      const line = lines.find(l => l.startsWith(`WHATSAPP ${i}:`))
-      if (line) whatsapp.push(line.replace(`WHATSAPP ${i}:`, '').trim())
+      const lineIdx = lines.findIndex(l => l.startsWith(`WHATSAPP ${i}:`))
+      if (lineIdx === -1) continue
+
+      const firstPart = lines[lineIdx].replace(`WHATSAPP ${i}:`, '').trim()
+      const extraLines: string[] = []
+      for (let j = lineIdx + 1; j < lines.length; j++) {
+        const next = lines[j]
+        if (next.startsWith(`WHATSAPP ${i + 1}:`) || next.startsWith('EMAIL ') || next.startsWith('---')) break
+        extraLines.push(next)
+      }
+      const fullMsg = [firstPart, ...extraLines].filter(Boolean).join('\n')
+      if (fullMsg) whatsapp.push(fullMsg)
     }
 
     // Extrai Emails — corpo pode ser multilinha
