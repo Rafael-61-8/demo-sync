@@ -2,7 +2,7 @@ import express from 'express'
 import path from 'path'
 import { supabase } from './tools/supabase'
 
-const PORT = parseInt(process.env.DASHBOARD_PORT || '3001')
+const PORT = parseInt(process.env.DASHBOARD_PORT || '3000')
 const CLEANUP_TOKEN = process.env.CLEANUP_TOKEN || 'recrutei-cleanup-2026'
 
 export function startServer() {
